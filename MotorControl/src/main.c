@@ -75,8 +75,7 @@ void setSpeed(int rpm) {
 
 
 
-void app_main(void)
-{
+void app_main(void){
     gpio_set_direction(pin1, GPIO_MODE_OUTPUT);
     gpio_set_direction(pin2, GPIO_MODE_OUTPUT);
     gpio_set_direction(pin3, GPIO_MODE_OUTPUT);
