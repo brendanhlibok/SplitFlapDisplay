@@ -4,22 +4,22 @@
 #include <freertos/task.h>
 #include <esp32/rom/ets_sys.h>
 
-#define pin1 GPIO_NUM_12
-#define pin2 GPIO_NUM_14
-#define pin3 GPIO_NUM_27
-#define pin4 GPIO_NUM_26
+#define pin1 GPIO_NUM_27 // IN1
+#define pin2 GPIO_NUM_26 // IN2
+#define pin3 GPIO_NUM_25 // IN3
+#define pin4 GPIO_NUM_33 // IN4
 
 static const int steps_per_revolution = 2038;
 
 static int step_case = 0;
 static uint32_t step_delay_us;
 
-void stepperPulse(bool dir){
+void stepperPulse(int step_case){
     switch(step_case){
         case 0:
             gpio_set_level(pin1, 1);
-            gpio_set_level(pin2, 0);
-            gpio_set_level(pin3, 1);
+            gpio_set_level(pin2, 1);
+            gpio_set_level(pin3, 0);
             gpio_set_level(pin4, 0);
         break;
         case 1:
@@ -30,8 +30,8 @@ void stepperPulse(bool dir){
         break;
         case 2:
             gpio_set_level(pin1, 0);
-            gpio_set_level(pin2, 1);
-            gpio_set_level(pin3, 0);
+            gpio_set_level(pin2, 0);
+            gpio_set_level(pin3, 1);
             gpio_set_level(pin4, 1);
         break;
         case 3:
@@ -80,10 +80,9 @@ void app_main(void)
 
     while(true){
         setSpeed(5);
-        spinSteps(steps_per_revolution);
+        spinSteps(-steps_per_revolution);
         vTaskDelay(pdMS_TO_TICKS(1000));
-
     }
 
 
-    }
+}
