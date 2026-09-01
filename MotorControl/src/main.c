@@ -14,7 +14,8 @@ static const int steps_per_revolution = 2038;
 static int step_case = 0;
 static uint32_t step_delay_us;
 
-void stepperPulse(int step_case){
+// This function controls a single step of the motor
+void stepperStep(int step_case){
     switch(step_case){
         case 0:
             gpio_set_level(pin1, 1);
@@ -43,6 +44,8 @@ void stepperPulse(int step_case){
     }
 }
 
+// This function takes in the number of steps needed to move with the direction and commands the motor
+// Notes: Negative value is CCW, positive value is CW, full rotation is 2038
 void spinSteps(int steps_to_move) {
     int steps_left = steps_to_move > 0 ? steps_to_move : -steps_to_move;
     int direction = steps_to_move > 0 ? 1 : -1;
@@ -55,7 +58,7 @@ void spinSteps(int steps_to_move) {
             step_case = 3;
         }
 
-        stepperPulse(step_case);
+        stepperStep(step_case);
         esp_rom_delay_us(step_delay_us);
 
         if (i % 100 == 0) {
@@ -65,6 +68,7 @@ void spinSteps(int steps_to_move) {
 
 }
 
+// This function takes in the desired speed in RPM and sets the delay time to achieve this speed.
 void setSpeed(int rpm) {
     step_delay_us = 60UL * 1000UL * 1000UL / steps_per_revolution / rpm;
 }
