@@ -10,6 +10,9 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
+#include "mdns.h"
+
+//WIFI Station
 
 #define ESP_WIFI_SSID      "bdan"
 #define ESP_WIFI_PASS      "CharizardEX14"   
@@ -18,10 +21,20 @@
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
 
-static const char *TAG = "wifi station";
+static const char *WIFITAG = "wifi station";
 static int s_retry_num = 0;
 
 static EventGroupHandle_t s_wifi_event_group;
+
+//MDNS
+
+#define MDNS_INSTANCE "SplitFlapDisplay"
+//#define EXAMPLE_BUTTON_GPIO   CONFIG_MDNS_BUTTON_GPIO
+
+static const char *MDNSTAG = "mdns-test";
+static char *generate_hostname(void);
+
+//HARDWARE SETUP
 
 #define pin1 GPIO_NUM_27 // IN1
 #define pin2 GPIO_NUM_26 // IN2
@@ -100,14 +113,14 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         if (s_retry_num < ESP_MAXIMUM_RETRY) {
             esp_wifi_connect();
             s_retry_num++;
-            ESP_LOGI(TAG, "retry to connect to the AP");
+            ESP_LOGI(WIFITAG, "retry to connect to the AP");
         } else {
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
         }
-        ESP_LOGI(TAG,"connect to the AP fail");
+        ESP_LOGI(WIFITAG,"connect to the AP fail");
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
-        ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
+        ESP_LOGI(WIFITAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
@@ -143,7 +156,7 @@ void wifi_init_softap(void) {
     esp_wifi_set_config(WIFI_IF_AP, &wifi_config);
     esp_wifi_start();
 
-    ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
+    ESP_LOGI(WIFITAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
              ESP_WIFI_SSID, ESP_WIFI_PASS, ESP_WIFI_CHANNEL);
 }
 #endif
@@ -184,7 +197,7 @@ void wifi_init_sta(void){
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
     ESP_ERROR_CHECK(esp_wifi_start() );
 
-    ESP_LOGI(TAG, "wifi_init_sta finished.");
+    ESP_LOGI(WIFITAG, "wifi_init_sta finished.");
 
     EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
             WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
@@ -193,15 +206,48 @@ void wifi_init_sta(void){
             portMAX_DELAY);
 
     if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
+        ESP_LOGI(WIFITAG, "connected to ap SSID:%s password:%s",
                  ESP_WIFI_SSID, ESP_WIFI_PASS);
     } else if (bits & WIFI_FAIL_BIT) {
-        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
+        ESP_LOGI(WIFITAG, "Failed to connect to SSID:%s, password:%s",
                  ESP_WIFI_SSID, ESP_WIFI_PASS);
     } else {
-        ESP_LOGE(TAG, "UNEXPECTED EVENT");
+        ESP_LOGE(WIFITAG, "UNEXPECTED EVENT");
     }
 
+}
+
+static void initialize_mdns(void)
+{
+    char *hostname = "splitflap";
+
+    //initialize mDNS
+    ESP_ERROR_CHECK(mdns_init());
+    //set mDNS hostname (required if you want to advertise services)
+    ESP_ERROR_CHECK(mdns_hostname_set(hostname));
+    ESP_LOGI(MDNSTAG, "mdns hostname set to: [%s]", hostname);
+    //set default mDNS instance name
+    ESP_ERROR_CHECK(mdns_instance_name_set(MDNS_INSTANCE));
+
+    //structure with TXT records
+    mdns_txt_item_t serviceTxtData[3] = {
+        {"board", "esp32"},
+        {"u", "user"},
+        {"p", "password"}
+    };
+
+    //initialize service
+    ESP_ERROR_CHECK(mdns_service_add("ESP32-WebServer", "_http", "_tcp", 80, serviceTxtData, 3));
+    ESP_ERROR_CHECK(mdns_service_subtype_add_for_host("ESP32-WebServer", "_http", "_tcp", NULL, "_server"));
+#if CONFIG_MDNS_MULTIPLE_INSTANCE
+    ESP_ERROR_CHECK(mdns_service_add("ESP32-WebServer1", "_http", "_tcp", 80, NULL, 0));
+#endif
+
+    //add another TXT item
+    ESP_ERROR_CHECK(mdns_service_txt_item_set("_http", "_tcp", "path", "/foobar"));
+    //change TXT item value
+    ESP_ERROR_CHECK(mdns_service_txt_item_set_with_explicit_value_len("_http", "_tcp", "u", "admin", strlen("admin")));
+    //free(hostname);
 }
 
 void app_main(void){
@@ -218,8 +264,12 @@ void app_main(void){
     }
     ESP_ERROR_CHECK(ret);
 
-    ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
+    ESP_LOGI(WIFITAG, "ESP_WIFI_MODE_STA");
+
     wifi_init_sta();
+
+    initialize_mdns();
+
 
     while(true){
         setSpeed(5);
