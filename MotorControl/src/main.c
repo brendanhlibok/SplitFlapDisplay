@@ -4,6 +4,7 @@
 #include <freertos/task.h>
 #include <esp32/rom/ets_sys.h>
 
+#include "esp_http_server.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "esp_netif.h"
@@ -11,6 +12,12 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "mdns.h"
+
+//WIFI AP
+#define ESP_AP_WIFI_SSID "SplitFlapDisplay"
+#define ESP_AP_WIFI_PASS "CharizardEX14"
+#define ESP_WIFI_CHANNEL 1
+#define MAX_STA_CONN 2
 
 //WIFI Station
 
@@ -32,7 +39,10 @@ static EventGroupHandle_t s_wifi_event_group;
 //#define EXAMPLE_BUTTON_GPIO   CONFIG_MDNS_BUTTON_GPIO
 
 static const char *MDNSTAG = "mdns-test";
-static char *generate_hostname(void);
+
+//HTTP Server
+
+static const char *HTTPTAG = "Basic HTTP Server";
 
 //HARDWARE SETUP
 
@@ -126,7 +136,6 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
     }
 }
 
-#if 0
 void wifi_init_softap(void) {
     esp_netif_init();
     esp_event_loop_create_default();
@@ -140,10 +149,10 @@ void wifi_init_softap(void) {
 
     wifi_config_t wifi_config = {
         .ap = {
-            .ssid = ESP_WIFI_SSID,
-            .ssid_len = strlen(ESP_WIFI_SSID),
+            .ssid = ESP_AP_WIFI_SSID,
+            .ssid_len = strlen(ESP_AP_WIFI_SSID),
             .channel = ESP_WIFI_CHANNEL,
-            .password = ESP_WIFI_PASS,
+            .password = ESP_AP_WIFI_PASS,
             .max_connection = MAX_STA_CONN,
             .authmode = WIFI_AUTH_WPA2_PSK,
             .pmf_cfg = {
@@ -159,7 +168,6 @@ void wifi_init_softap(void) {
     ESP_LOGI(WIFITAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
              ESP_WIFI_SSID, ESP_WIFI_PASS, ESP_WIFI_CHANNEL);
 }
-#endif
 
 void wifi_init_sta(void){
     s_wifi_event_group = xEventGroupCreate();
@@ -250,6 +258,36 @@ static void initialize_mdns(void)
     //free(hostname);
 }
 
+static esp_err_t hello_get_handler(httpd_req_t *req)
+{
+    const char* resp_str = "<h1>Hello World</h1>";
+    httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+
+}
+
+static const httpd_uri_t hello_world_uri= {
+    .uri       = "/",               // the address at which the resource can be found
+    .method    = HTTP_GET,          // The HTTP method (HTTP_GET, HTTP_POST, ...)
+    .handler   = hello_get_handler, // The function which process the request
+    .user_ctx  = NULL               // Additional user data for context
+};
+
+httpd_handle_t start_webserver() {
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    httpd_handle_t server = NULL;
+    
+    if (httpd_start(&server, &config) == ESP_OK) {
+        ESP_LOGI(HTTPTAG, "Server started successfully, registering URI handlers...");
+        httpd_register_uri_handler(server, &hello_world_uri);
+        return server;
+    }
+
+    ESP_LOGE(HTTPTAG, "Failed to start server");
+    return NULL;
+}
+
+
 void app_main(void){
     gpio_set_direction(pin1, GPIO_MODE_OUTPUT);
     gpio_set_direction(pin2, GPIO_MODE_OUTPUT);
@@ -267,8 +305,11 @@ void app_main(void){
     ESP_LOGI(WIFITAG, "ESP_WIFI_MODE_STA");
 
     wifi_init_sta();
+    wifi_init_softap();
 
     initialize_mdns();
+
+    httpd_handle_t server = start_webserver();
 
 
     while(true){
