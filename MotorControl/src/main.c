@@ -14,8 +14,8 @@
 #include "mdns.h"
 
 //WIFI AP
-#define ESP_AP_WIFI_SSID "SplitFlapDisplay"
-#define ESP_AP_WIFI_PASS "CharizardEX14"
+#define ESP_AP_WIFI_SSID "Brendan's iPhone"
+#define ESP_AP_WIFI_PASS "Moonlight321"
 #define ESP_WIFI_CHANNEL 1
 #define MAX_STA_CONN 2
 
@@ -36,6 +36,7 @@ static EventGroupHandle_t s_wifi_event_group;
 //MDNS
 
 #define MDNS_INSTANCE "SplitFlapDisplay"
+
 //#define EXAMPLE_BUTTON_GPIO   CONFIG_MDNS_BUTTON_GPIO
 
 static const char *MDNSTAG = "mdns-test";
@@ -261,6 +262,7 @@ static void initialize_mdns(void)
 static esp_err_t hello_get_handler(httpd_req_t *req)
 {
     const char* resp_str = "<h1>Hello World</h1>";
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 
@@ -273,12 +275,28 @@ static const httpd_uri_t hello_world_uri= {
     .user_ctx  = NULL               // Additional user data for context
 };
 
+static esp_err_t test_handler(httpd_req_t *req) {
+    const char* resp_str = "TESTING";
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+}
+
+static const httpd_uri_t test_uri= {
+    .uri       = "/test",               // the address at which the resource can be found
+    .method    = HTTP_GET,          // The HTTP method (HTTP_GET, HTTP_POST, ...)
+    .handler   = test_handler, // The function which process the request
+    .user_ctx  = NULL               // Additional user data for context
+};
+
+
 httpd_handle_t start_webserver() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     httpd_handle_t server = NULL;
     
     if (httpd_start(&server, &config) == ESP_OK) {
         ESP_LOGI(HTTPTAG, "Server started successfully, registering URI handlers...");
+        httpd_register_uri_handler(server, &test_uri);
         httpd_register_uri_handler(server, &hello_world_uri);
         return server;
     }
@@ -300,6 +318,7 @@ void app_main(void){
       ESP_ERROR_CHECK(nvs_flash_erase());
       ret = nvs_flash_init();
     }
+
     ESP_ERROR_CHECK(ret);
 
     ESP_LOGI(WIFITAG, "ESP_WIFI_MODE_STA");
@@ -310,7 +329,6 @@ void app_main(void){
     initialize_mdns();
 
     httpd_handle_t server = start_webserver();
-
 
     while(true){
         setSpeed(5);
