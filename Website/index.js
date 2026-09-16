@@ -12,6 +12,11 @@ function commandMotor() {
     } else {
         console.log("No radio button selected")
     }
-    fetch("SplitFlapDisplay.local/test")
-
+    response = fetch("http://192.168.4.1/test", {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/plain"
+      },
+      body: "switch_to_testing"
+    });
 }
