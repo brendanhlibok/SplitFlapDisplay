@@ -14,8 +14,8 @@
 #include "mdns.h"
 
 //WIFI AP
-#define ESP_AP_WIFI_SSID "Brendan's iPhone"
-#define ESP_AP_WIFI_PASS "Moonlight321"
+#define ESP_AP_WIFI_SSID "splitflapwifi"
+#define ESP_AP_WIFI_PASS "CharizardEX14"
 #define ESP_WIFI_CHANNEL 1
 #define MAX_STA_CONN 2
 
@@ -228,7 +228,7 @@ void wifi_init_sta(void){
 
 static void initialize_mdns(void)
 {
-    char *hostname = "splitflap";
+    char *hostname = MDNS_INSTANCE;
 
     //initialize mDNS
     ESP_ERROR_CHECK(mdns_init());
@@ -276,7 +276,7 @@ static const httpd_uri_t hello_world_uri= {
 };
 
 static esp_err_t test_handler(httpd_req_t *req) {
-    const char* resp_str = "TESTING";
+    const char* resp_str = "<h1>TESTING</h1>";
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
@@ -284,10 +284,12 @@ static esp_err_t test_handler(httpd_req_t *req) {
 
 static const httpd_uri_t test_uri= {
     .uri       = "/test",               // the address at which the resource can be found
-    .method    = HTTP_GET,          // The HTTP method (HTTP_GET, HTTP_POST, ...)
+    .method    = HTTP_POST,          // The HTTP method (HTTP_GET, HTTP_POST, ...)
     .handler   = test_handler, // The function which process the request
     .user_ctx  = NULL               // Additional user data for context
 };
+
+
 
 
 httpd_handle_t start_webserver() {
