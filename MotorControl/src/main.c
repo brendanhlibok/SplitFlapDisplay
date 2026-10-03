@@ -3,6 +3,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <esp32/rom/ets_sys.h>
+#include <sys/param.h>
 
 #include "esp_http_server.h"
 #include "esp_system.h"
@@ -137,39 +138,6 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
     }
 }
 
-void wifi_init_softap(void) {
-    esp_netif_init();
-    esp_event_loop_create_default();
-    esp_netif_create_default_wifi_ap();
-
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-
-    esp_wifi_init(&cfg);
-
-    esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, NULL);
-
-    wifi_config_t wifi_config = {
-        .ap = {
-            .ssid = ESP_AP_WIFI_SSID,
-            .ssid_len = strlen(ESP_AP_WIFI_SSID),
-            .channel = ESP_WIFI_CHANNEL,
-            .password = ESP_AP_WIFI_PASS,
-            .max_connection = MAX_STA_CONN,
-            .authmode = WIFI_AUTH_WPA2_PSK,
-            .pmf_cfg = {
-                    .required = true,
-            },
-        },
-    };
-
-    esp_wifi_set_mode(WIFI_MODE_AP);
-    esp_wifi_set_config(WIFI_IF_AP, &wifi_config);
-    esp_wifi_start();
-
-    ESP_LOGI(WIFITAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
-             ESP_WIFI_SSID, ESP_WIFI_PASS, ESP_WIFI_CHANNEL);
-}
-
 void wifi_init_sta(void){
     s_wifi_event_group = xEventGroupCreate();
 
@@ -276,9 +244,34 @@ static const httpd_uri_t hello_world_uri= {
 };
 
 static esp_err_t test_handler(httpd_req_t *req) {
+    char buf[128];
+    int ret, remaining = req->content_len;
+
+    if (remaining <= 0) {
+        httpd_resp_send_404(req);
+        return ESP_FAIL;
+    }
+
+    while (remaining > 0) {
+        ret = httpd_req_recv(req, buf, MIN(remaining, sizeof(buf) -1));
+    
+
+    if (ret <=0) {
+        if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
+        }
+        return ESP_FAIL;
+    }
+
+    buf [ret] = '\0';
+    printf("received chunk %s\n", buf);
+
+    remaining -= ret;
+    }
+
     const char* resp_str = "<h1>TESTING</h1>";
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
+
     return ESP_OK;
 }
 
@@ -288,8 +281,6 @@ static const httpd_uri_t test_uri= {
     .handler   = test_handler, // The function which process the request
     .user_ctx  = NULL               // Additional user data for context
 };
-
-
 
 
 httpd_handle_t start_webserver() {
@@ -325,8 +316,8 @@ void app_main(void){
 
     ESP_LOGI(WIFITAG, "ESP_WIFI_MODE_STA");
 
+    //Start station mode
     wifi_init_sta();
-    wifi_init_softap();
 
     initialize_mdns();
 

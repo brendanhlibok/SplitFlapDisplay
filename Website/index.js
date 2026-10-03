@@ -12,7 +12,7 @@ function commandMotor() {
     } else {
         console.log("No radio button selected")
     }
-    response = fetch("http://192.168.4.1/test", {
+    response = fetch("10.0.0.55/test", {
       method: "POST",
       headers: {
         "Content-Type": "text/plain"
