@@ -36,7 +36,7 @@ static EventGroupHandle_t s_wifi_event_group;
 
 //MDNS
 
-#define MDNS_INSTANCE "SplitFlapDisplay"
+#define MDNS_INSTANCE "splitflapdisplay"
 
 //#define EXAMPLE_BUTTON_GPIO   CONFIG_MDNS_BUTTON_GPIO
 
@@ -173,6 +173,7 @@ void wifi_init_sta(void){
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
     ESP_ERROR_CHECK(esp_wifi_start() );
+    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE)); //Turn off power save mode
 
     ESP_LOGI(WIFITAG, "wifi_init_sta finished.");
 
@@ -261,6 +262,7 @@ static esp_err_t test_handler(httpd_req_t *req) {
         }
         return ESP_FAIL;
     }
+
 
     buf [ret] = '\0';
     printf("received chunk %s\n", buf);
