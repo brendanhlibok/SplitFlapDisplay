@@ -274,6 +274,8 @@ static esp_err_t test_handler(httpd_req_t *req) {
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
 
+    ESP_LOGI(HTTPTAG, "success");
+
     return ESP_OK;
 }
 
