@@ -13,6 +13,7 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "mdns.h"
+#include "cJSON.h"
 
 //WIFI AP
 #define ESP_AP_WIFI_SSID "splitflapwifi"
@@ -46,6 +47,10 @@ static const char *MDNSTAG = "mdns-test";
 
 static const char *HTTPTAG = "Basic HTTP Server";
 
+//JSON 
+
+static const char *JSONTAG = "JSON_PARSE";
+
 //HARDWARE SETUP
 
 #define pin1 GPIO_NUM_27 // IN1
@@ -58,6 +63,10 @@ static const int steps_per_revolution = 2038;
 static int step_case = 0;
 static uint32_t step_delay_us;
 
+struct motorChange{
+    int steps;
+    char direction[4];
+};
 
 // This function controls a single step of the motor
 void stepperStep(int step_case){
@@ -91,11 +100,18 @@ void stepperStep(int step_case){
 
 // This function takes in the number of steps needed to move with the direction and commands the motor
 // Notes: Negative value is CCW, positive value is CW, full rotation is 2038
-void spinSteps(int steps_to_move) {
-    int steps_left = steps_to_move > 0 ? steps_to_move : -steps_to_move;
-    int direction = steps_to_move > 0 ? 1 : -1;
+void spinSteps(struct motorChange change) {
 
-    for (int i=0; i<steps_left; i++) {
+    int steps_to_move = change.steps;
+    int direction = 1;
+
+    if (strcmp(change.direction, "cw") == 0) {
+        direction = 1;
+    } else {
+        direction = -1;
+    }
+
+    for (int i=0; i<steps_to_move; i++) {
         step_case += direction;
         if (step_case == 4) {
             step_case = 0;
@@ -228,6 +244,38 @@ static void initialize_mdns(void)
     //free(hostname);
 }
 
+struct motorChange parse_json(const char *json_string) {
+
+    struct motorChange result;
+
+    cJSON *root = cJSON_Parse(json_string);
+
+    //Split the steps value
+    cJSON *steps_item = cJSON_GetObjectItemCaseSensitive(root, "steps");
+    
+    cJSON_IsString(steps_item);
+
+    int steps = atoi(steps_item->valuestring);
+    ESP_LOGI(JSONTAG, "Steps (string): %s, As Integer: %d", steps_item->valuestring, steps);
+
+    // Split the direction value
+    cJSON *direction_item = cJSON_GetObjectItemCaseSensitive(root, "direction");
+
+    cJSON_IsString(direction_item);
+
+    ESP_LOGI(JSONTAG, "Direction: %s", direction_item->valuestring);
+
+    result.steps = steps;
+    strncpy(result.direction, direction_item->valuestring, sizeof(result.direction) - 1);
+
+    printf("steps: %d, direction: %s\n", result.steps, result.direction);
+
+    cJSON_Delete(root);
+    
+    return result;
+
+}
+
 static esp_err_t hello_get_handler(httpd_req_t *req)
 {
     const char* resp_str = "<h1>Hello World</h1>";
@@ -267,6 +315,10 @@ static esp_err_t test_handler(httpd_req_t *req) {
     buf [ret] = '\0';
     printf("received chunk %s\n", buf);
 
+    struct motorChange change = parse_json(buf);
+
+    spinSteps(change);
+
     remaining -= ret;
     }
 
@@ -303,6 +355,7 @@ httpd_handle_t start_webserver() {
 }
 
 
+
 void app_main(void){
     gpio_set_direction(pin1, GPIO_MODE_OUTPUT);
     gpio_set_direction(pin2, GPIO_MODE_OUTPUT);
@@ -327,11 +380,16 @@ void app_main(void){
 
     httpd_handle_t server = start_webserver();
 
-    while(true){
+    struct motorChange change = {
+        .steps = 1000,
+        .direction = "cw"
+    };
+
+    /*while(true){
         setSpeed(5);
-        spinSteps(-steps_per_revolution);
+        spinSteps(change);
         vTaskDelay(pdMS_TO_TICKS(1000));
-    }
+    }*/
 
 
 }
