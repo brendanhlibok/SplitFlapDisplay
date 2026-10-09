@@ -15,12 +15,6 @@
 #include "mdns.h"
 #include "cJSON.h"
 
-//WIFI AP
-#define ESP_AP_WIFI_SSID "splitflapwifi"
-#define ESP_AP_WIFI_PASS "CharizardEX14"
-#define ESP_WIFI_CHANNEL 1
-#define MAX_STA_CONN 2
-
 //WIFI Station
 
 #define ESP_WIFI_SSID      "bdan"
@@ -63,12 +57,13 @@ static const int steps_per_revolution = 2038;
 static int step_case = 0;
 static uint32_t step_delay_us;
 
+// Data type for motor movement
 struct motorChange{
     int steps;
     char direction[4];
 };
 
-// This function controls a single step of the motor
+// This function sets the motor pins based on the step case.
 void stepperStep(int step_case){
     switch(step_case){
         case 0:
@@ -99,20 +94,22 @@ void stepperStep(int step_case){
 }
 
 // This function takes in the number of steps needed to move with the direction and commands the motor
-// Notes: Negative value is CCW, positive value is CW, full rotation is 2038
+// Notes: Positive value is CW, Negative value is CCW, 1 Full rotation is 2038 steps
 void spinSteps(struct motorChange change) {
 
-    int steps_to_move = change.steps;
     int direction = 1;
 
+    // Set the increment for the direction
     if (strcmp(change.direction, "cw") == 0) {
         direction = 1;
     } else {
         direction = -1;
     }
 
-    for (int i=0; i<steps_to_move; i++) {
+    // Run through the steps
+    for (int i=0; i<change.steps; i++) {
         step_case += direction;
+
         if (step_case == 4) {
             step_case = 0;
         } else if (step_case < 0) {
@@ -122,6 +119,7 @@ void spinSteps(struct motorChange change) {
         stepperStep(step_case);
         esp_rom_delay_us(step_delay_us);
 
+        // Delays 1 tick every 100 steps
         if (i % 100 == 0) {
                 vTaskDelay(1);
             }
@@ -134,8 +132,10 @@ void setSpeed(int rpm) {
     step_delay_us = 60UL * 1000UL * 1000UL / steps_per_revolution / rpm;
 }
 
+// This function handles wifi connection and IP setting events
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
-        if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
+    // Handle wifi connection
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         if (s_retry_num < ESP_MAXIMUM_RETRY) {
@@ -146,6 +146,8 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
         }
         ESP_LOGI(WIFITAG,"connect to the AP fail");
+
+    // Handle IP setting once connected
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
         ESP_LOGI(WIFITAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
@@ -154,19 +156,28 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
     }
 }
 
+// This function initializes the station mode and attempts connection to the network
 void wifi_init_sta(void){
+
     s_wifi_event_group = xEventGroupCreate();
 
+    //Initialize the networking stack
     esp_netif_init();
 
+    //Creates dispatcher that matches incoming events
     esp_event_loop_create_default();
+
+    //Creates network interface for station mode
     esp_netif_create_default_wifi_sta();
 
+    //Initializes wifi driver with default settings
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     esp_wifi_init(&cfg);
 
+    // Registers the wifi_event handler for WiFi connection, and IP
     esp_event_handler_instance_t instance_any_id;
     esp_event_handler_instance_t instance_got_ip;
+
     esp_event_handler_instance_register(WIFI_EVENT,
                                         ESP_EVENT_ANY_ID,
                                         &wifi_event_handler,
@@ -178,21 +189,21 @@ void wifi_init_sta(void){
                                         NULL,
                                         &instance_got_ip);
 
+    // Builds the config struct with my SSID/password
     wifi_config_t wifi_config = {
         .sta = {
             .ssid = ESP_WIFI_SSID,
             .password = ESP_WIFI_PASS,
-
         },
     };
     
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
-    ESP_ERROR_CHECK(esp_wifi_start() );
+    ESP_ERROR_CHECK(esp_wifi_start()); // Starts the driver, and triggers the handler to call esp_wifi_connect()
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE)); //Turn off power save mode
-
     ESP_LOGI(WIFITAG, "wifi_init_sta finished.");
 
+    // Waits for connection or failure, outputs result
     EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
             WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
             pdFALSE,
@@ -211,6 +222,7 @@ void wifi_init_sta(void){
 
 }
 
+// 
 static void initialize_mdns(void)
 {
     char *hostname = MDNS_INSTANCE;
@@ -317,6 +329,7 @@ static esp_err_t test_handler(httpd_req_t *req) {
 
     struct motorChange change = parse_json(buf);
 
+    setSpeed(14);
     spinSteps(change);
 
     remaining -= ret;
@@ -357,6 +370,7 @@ httpd_handle_t start_webserver() {
 
 
 void app_main(void){
+    //Initialize Motor Pins
     gpio_set_direction(pin1, GPIO_MODE_OUTPUT);
     gpio_set_direction(pin2, GPIO_MODE_OUTPUT);
     gpio_set_direction(pin3, GPIO_MODE_OUTPUT);
@@ -371,25 +385,12 @@ void app_main(void){
 
     ESP_ERROR_CHECK(ret);
 
-    ESP_LOGI(WIFITAG, "ESP_WIFI_MODE_STA");
-
-    //Start station mode
+     //Start station mode
+    ESP_LOGI(WIFITAG, "Setting up Station Mode");
     wifi_init_sta();
 
     initialize_mdns();
 
-    httpd_handle_t server = start_webserver();
-
-    struct motorChange change = {
-        .steps = 1000,
-        .direction = "cw"
-    };
-
-    /*while(true){
-        setSpeed(5);
-        spinSteps(change);
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }*/
-
+    start_webserver();
 
 }
