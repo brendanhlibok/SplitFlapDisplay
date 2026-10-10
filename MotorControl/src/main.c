@@ -4,9 +4,9 @@
 #include <freertos/task.h>
 #include <esp32/rom/ets_sys.h>
 #include <sys/param.h>
+#include <freertos/task.h>
 
 #include "esp_http_server.h"
-#include "esp_system.h"
 #include "esp_wifi.h"
 #include "esp_netif.h"
 #include "esp_event.h"
@@ -63,7 +63,7 @@ struct motorChange{
     char direction[4];
 };
 
-// This function sets the motor pins based on the step case.
+// Sets the motor pins based on the step case.
 void stepperStep(int step_case){
     switch(step_case){
         case 0:
@@ -93,7 +93,7 @@ void stepperStep(int step_case){
     }
 }
 
-// This function takes in the number of steps needed to move with the direction and commands the motor
+// Takes in the number of steps needed to move with the direction and commands the motor
 // Notes: Positive value is CW, Negative value is CCW, 1 Full rotation is 2038 steps
 void spinSteps(struct motorChange change) {
 
@@ -101,9 +101,9 @@ void spinSteps(struct motorChange change) {
 
     // Set the increment for the direction
     if (strcmp(change.direction, "cw") == 0) {
-        direction = 1;
-    } else {
         direction = -1;
+    } else {
+        direction = 1;
     }
 
     // Run through the steps
@@ -127,12 +127,12 @@ void spinSteps(struct motorChange change) {
 
 }
 
-// This function takes in the desired speed in RPM and sets the delay time to achieve this speed.
+// Takes in the desired speed in RPM and sets the delay time to achieve this speed.
 void setSpeed(int rpm) {
     step_delay_us = 60UL * 1000UL * 1000UL / steps_per_revolution / rpm;
 }
 
-// This function handles wifi connection and IP setting events
+// Handles wifi connection and IP setting events
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     // Handle wifi connection
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
@@ -156,7 +156,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
     }
 }
 
-// This function initializes the station mode and attempts connection to the network
+// Initializes the station mode and attempts connection to the network
 void wifi_init_sta(void){
 
     s_wifi_event_group = xEventGroupCreate();
@@ -222,7 +222,7 @@ void wifi_init_sta(void){
 
 }
 
-// 
+// Initializes mdns
 static void initialize_mdns(void)
 {
     char *hostname = MDNS_INSTANCE;
@@ -235,27 +235,9 @@ static void initialize_mdns(void)
     //set default mDNS instance name
     ESP_ERROR_CHECK(mdns_instance_name_set(MDNS_INSTANCE));
 
-    //structure with TXT records
-    mdns_txt_item_t serviceTxtData[3] = {
-        {"board", "esp32"},
-        {"u", "user"},
-        {"p", "password"}
-    };
-
-    //initialize service
-    ESP_ERROR_CHECK(mdns_service_add("ESP32-WebServer", "_http", "_tcp", 80, serviceTxtData, 3));
-    ESP_ERROR_CHECK(mdns_service_subtype_add_for_host("ESP32-WebServer", "_http", "_tcp", NULL, "_server"));
-#if CONFIG_MDNS_MULTIPLE_INSTANCE
-    ESP_ERROR_CHECK(mdns_service_add("ESP32-WebServer1", "_http", "_tcp", 80, NULL, 0));
-#endif
-
-    //add another TXT item
-    ESP_ERROR_CHECK(mdns_service_txt_item_set("_http", "_tcp", "path", "/foobar"));
-    //change TXT item value
-    ESP_ERROR_CHECK(mdns_service_txt_item_set_with_explicit_value_len("_http", "_tcp", "u", "admin", strlen("admin")));
-    //free(hostname);
 }
 
+// Parses json for direction and speed
 struct motorChange parse_json(const char *json_string) {
 
     struct motorChange result;
@@ -265,49 +247,39 @@ struct motorChange parse_json(const char *json_string) {
     //Split the steps value
     cJSON *steps_item = cJSON_GetObjectItemCaseSensitive(root, "steps");
     
-    cJSON_IsString(steps_item);
+    int steps = 0;
+    
+    if (cJSON_IsString(steps_item)){
+        steps = atoi(steps_item->valuestring);
+        ESP_LOGI(JSONTAG, "Steps (string): %s, As Integer: %d", steps_item->valuestring, steps);
+    } else {
+        ESP_LOGI(JSONTAG, "Invalid step format");
+    }
 
-    int steps = atoi(steps_item->valuestring);
-    ESP_LOGI(JSONTAG, "Steps (string): %s, As Integer: %d", steps_item->valuestring, steps);
-
+    result.steps = steps;
+    
     // Split the direction value
     cJSON *direction_item = cJSON_GetObjectItemCaseSensitive(root, "direction");
 
-    cJSON_IsString(direction_item);
-
     ESP_LOGI(JSONTAG, "Direction: %s", direction_item->valuestring);
 
-    result.steps = steps;
     strncpy(result.direction, direction_item->valuestring, sizeof(result.direction) - 1);
 
     printf("steps: %d, direction: %s\n", result.steps, result.direction);
 
+    // Frees up heap memory allocated for the tree
     cJSON_Delete(root);
     
     return result;
 
 }
 
-static esp_err_t hello_get_handler(httpd_req_t *req)
-{
-    const char* resp_str = "<h1>Hello World</h1>";
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
-    return ESP_OK;
-
-}
-
-static const httpd_uri_t hello_world_uri= {
-    .uri       = "/",               // the address at which the resource can be found
-    .method    = HTTP_GET,          // The HTTP method (HTTP_GET, HTTP_POST, ...)
-    .handler   = hello_get_handler, // The function which process the request
-    .user_ctx  = NULL               // Additional user data for context
-};
-
-static esp_err_t test_handler(httpd_req_t *req) {
+// Handles motor spin inputs from website
+static esp_err_t motor_command_handler(httpd_req_t *req) {
     char buf[128];
     int ret, remaining = req->content_len;
 
+    // If buffer is empty, send error
     if (remaining <= 0) {
         httpd_resp_send_404(req);
         return ESP_FAIL;
@@ -316,24 +288,20 @@ static esp_err_t test_handler(httpd_req_t *req) {
     while (remaining > 0) {
         ret = httpd_req_recv(req, buf, MIN(remaining, sizeof(buf) -1));
     
-
-    if (ret <=0) {
-        if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
+        if (ret <=0) {
+            return ESP_FAIL;
         }
-        return ESP_FAIL;
+
+        buf [ret] = '\0';
+        printf("received chunk %s\n", buf);
+
+        remaining -= ret;
     }
-
-
-    buf [ret] = '\0';
-    printf("received chunk %s\n", buf);
 
     struct motorChange change = parse_json(buf);
 
     setSpeed(14);
     spinSteps(change);
-
-    remaining -= ret;
-    }
 
     const char* resp_str = "<h1>TESTING</h1>";
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
@@ -344,29 +312,28 @@ static esp_err_t test_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-static const httpd_uri_t test_uri= {
-    .uri       = "/test",               // the address at which the resource can be found
+// Sets uri for the motor command handler
+static const httpd_uri_t motor_command_uri= {
+    .uri       = "/motor_command",               // the address at which the resource can be found
     .method    = HTTP_POST,          // The HTTP method (HTTP_GET, HTTP_POST, ...)
-    .handler   = test_handler, // The function which process the request
+    .handler   = motor_command_handler, // The function which process the request
     .user_ctx  = NULL               // Additional user data for context
 };
 
-
+// Starts webserver
 httpd_handle_t start_webserver() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     httpd_handle_t server = NULL;
     
     if (httpd_start(&server, &config) == ESP_OK) {
         ESP_LOGI(HTTPTAG, "Server started successfully, registering URI handlers...");
-        httpd_register_uri_handler(server, &test_uri);
-        httpd_register_uri_handler(server, &hello_world_uri);
+        httpd_register_uri_handler(server, &motor_command_uri);
         return server;
     }
 
     ESP_LOGE(HTTPTAG, "Failed to start server");
     return NULL;
 }
-
 
 
 void app_main(void){
