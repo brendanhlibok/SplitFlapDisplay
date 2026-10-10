@@ -7,15 +7,24 @@
 </head>
 <body>
     <h1>Motor Controller</h1>
+    <ul class="dropdown">
+        <label for="Rotation Angles">Rotation Angle</label>
+        <select name="Rotation Angles" id="Rotation Angles" title="Rotation Angles">
+            <option value="custom">Custom</option>
+            <option value="0.25">1/4</option>
+            <option value="0.5">1/2</option>
+            <option value="1">1</option>
+        </select>
+    </ul>
     <div>
         Steps to move<br>
         <textarea id="steps to move" rows="1" cols="40" placeholder="Type # of steps to move..."></textarea>
     </div>
     <div>
         Direction<br>
-        <input type="radio" id="dir" name="cw" value="1">
+        <input type="radio" id="dir" name="dir" value="cw">
         <label for="cw">Clockwise</label>
-        <input type="radio" id="dir" name="ccw" value="-1">
+        <input type="radio" id="dir" name="dir" value="ccw">
         <label for="ccw">Counterclockwise</label>
     </div>
     <br>

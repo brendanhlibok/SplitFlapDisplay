@@ -1,6 +1,18 @@
 const spin = document.getElementById('spin')
 
+const rotAngle = document.getElementById("Rotation Angles")
+
+rotAngle.addEventListener('change', setAngle)
+
 spin.addEventListener('click', commandMotor)
+
+function setAngle() {
+    if (rotAngle.value != "custom"){
+    document.querySelector('textarea').value = String(Math.floor(parseFloat(rotAngle.value) * 2038))
+    } else {
+      document.querySelector('textarea').value = ""
+    }
+}
 
 function commandMotor() {
     steps = document.querySelector('textarea')
@@ -8,12 +20,12 @@ function commandMotor() {
 
     const data = {
       steps: steps.value,
-      direction: direction.name
-    };
+      direction: direction.value
+    }
 
     if (direction){
          console.log("Steps: ", steps.value);
-         console.log("Direction: ", direction.name);
+         console.log("Direction: ", direction.value);
 
     } else {
         console.log("No radio button selected")
@@ -21,11 +33,11 @@ function commandMotor() {
 
     console.log(JSON.stringify(data));
 
-    response = fetch("http://splitflapdisplay.local/test", {
+    response = fetch("http://splitflapdisplay.local/motor_command", {
       method: "POST",
       headers: {
         "Content-Type": "text/plain"
       },
       body: JSON.stringify(data),
-    });
+    })
 }
