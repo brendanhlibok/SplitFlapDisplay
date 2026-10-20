@@ -1,0 +1,11 @@
+.dropdown-content{
+    display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  list-style: none;
+}
+.main-menu{
+    display: block;
+    flex-direction: column;
+}

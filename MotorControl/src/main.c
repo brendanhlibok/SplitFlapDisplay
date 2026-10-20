@@ -52,10 +52,17 @@ static const char *JSONTAG = "JSON_PARSE";
 #define pin3 GPIO_NUM_25 // IN3
 #define pin4 GPIO_NUM_33 // IN4
 
+#define pin5 GPIO_NUM_35 // Photointerruptor pin
+
 static const int steps_per_revolution = 2038;
 
 static int step_case = 0;
+static volatile int currentstep = 0;
 static uint32_t step_delay_us;
+
+
+// Spin lock
+static portMUX_TYPE some_spinlock = portMUX_INITIALIZER_UNLOCKED;
 
 // Data type for motor movement
 struct motorChange{
@@ -118,6 +125,10 @@ void spinSteps(struct motorChange change) {
 
         stepperStep(step_case);
         esp_rom_delay_us(step_delay_us);
+
+        portENTER_CRITICAL(&some_spinlock);
+        currentstep += 1;
+        portEXIT_CRITICAL(&some_spinlock);
 
         // Delays 1 tick every 100 steps
         if (i % 100 == 0) {
@@ -335,6 +346,20 @@ httpd_handle_t start_webserver() {
     return NULL;
 }
 
+static void IRAM_ATTR gpio_isr_handler(void* arg) {
+    portENTER_CRITICAL_ISR(&some_spinlock);
+    printf("Step: %d", currentstep);
+    currentstep = 0;
+    printf("Step: %d", currentstep);
+    portEXIT_CRITICAL_ISR(&some_spinlock);
+}
+
+static void intr_init(int pin){
+    gpio_set_intr_type(pin, GPIO_INTR_NEGEDGE);
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(pin, gpio_isr_handler, NULL);
+    gpio_intr_enable(pin);
+}
 
 void app_main(void){
     //Initialize Motor Pins
@@ -342,6 +367,12 @@ void app_main(void){
     gpio_set_direction(pin2, GPIO_MODE_OUTPUT);
     gpio_set_direction(pin3, GPIO_MODE_OUTPUT);
     gpio_set_direction(pin4, GPIO_MODE_OUTPUT);
+
+    //Initialize Photointerruptor Pin
+    gpio_set_direction(pin5, GPIO_MODE_INPUT);
+
+    intr_init(pin5);
+
 
    //Initialize NVS
     esp_err_t ret = nvs_flash_init();
@@ -359,5 +390,7 @@ void app_main(void){
     initialize_mdns();
 
     start_webserver();
+
+    
 
 }
