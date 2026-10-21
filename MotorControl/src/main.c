@@ -130,6 +130,8 @@ void spinSteps(struct motorChange change) {
         currentstep += 1;
         portEXIT_CRITICAL(&some_spinlock);
 
+        printf("Step: %d\n", currentstep);
+
         // Delays 1 tick every 100 steps
         if (i % 100 == 0) {
                 vTaskDelay(1);
@@ -348,9 +350,7 @@ httpd_handle_t start_webserver() {
 
 static void IRAM_ATTR gpio_isr_handler(void* arg) {
     portENTER_CRITICAL_ISR(&some_spinlock);
-    printf("Step: %d", currentstep);
     currentstep = 0;
-    printf("Step: %d", currentstep);
     portEXIT_CRITICAL_ISR(&some_spinlock);
 }
 
